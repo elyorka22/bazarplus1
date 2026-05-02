@@ -12,6 +12,7 @@ async function bootstrap() {
   const app = await NestFactory.createApplicationContext(WorkerModule, {
     logger: ['error', 'warn', 'log'],
   });
+  app.enableShutdownHooks();
   await app.init();
   logger.log(
     `Queue workers started (metrics http://${metricsBind}:${metricsPort}/metrics)`,

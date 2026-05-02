@@ -13,7 +13,14 @@ export const envValidationSchema = Joi.object({
   }),
   /** Set to `true` to expose /docs Swagger UI in production (default off). */
   ENABLE_SWAGGER: Joi.string().valid('true', 'false').optional(),
-  DATABASE_URL: Joi.string().required(),
+  /** Must be a PostgreSQL URL (compose: host `postgres`, db `bazarplus`). */
+  DATABASE_URL: Joi.string()
+    .pattern(/^postgresql:\/\/.+/i)
+    .required()
+    .messages({
+      'string.pattern.base':
+        'DATABASE_URL must start with postgresql:// (see api/.env.production.example)',
+    }),
   REDIS_URL: Joi.string().required(),
   JWT_ACCESS_SECRET: Joi.string().min(16).required(),
   JWT_REFRESH_SECRET: Joi.string().min(16).required(),

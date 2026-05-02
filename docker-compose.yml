@@ -40,6 +40,9 @@ services:
       - ./api/.env.production
     ports:
       - '3000:3000'
+    environment:
+      # Ensure Nest validates env before Prisma connects (clear failure vs restart loop)
+      NODE_ENV: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,12 +56,13 @@ services:
     restart: unless-stopped
     env_file:
       - ./api/.env.production
+    environment:
+      NODE_ENV: production
+      WORKER_METRICS_PORT: ${WORKER_METRICS_PORT:-9101}
     # Do not publish worker metrics to the host / public internet. Prometheus on this
     # compose network scrapes worker:9101 by service name.
     expose:
       - '9101'
-    environment:
-      WORKER_METRICS_PORT: ${WORKER_METRICS_PORT:-9101}
     depends_on:
       postgres:
         condition: service_healthy

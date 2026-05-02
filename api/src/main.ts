@@ -71,6 +71,8 @@ async function bootstrap() {
     SwaggerModule.setup('docs', app, document);
   }
 
+  app.enableShutdownHooks();
+
   const port = parseInt(process.env.PORT ?? '3000', 10);
   await app.listen(port);
 }
