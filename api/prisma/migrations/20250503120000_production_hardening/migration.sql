@@ -1,6 +1,4 @@
--- Payment status: PAID (webhook-confirmed); migrate legacy COMPLETED semantics
-ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'PAID';
-
+-- Payment status: PAID was added in migration 20250503115959_add_payment_status_paid_value
 UPDATE "payments" SET status = 'PAID'::"PaymentStatus" WHERE status = 'COMPLETED'::"PaymentStatus";
 
 CREATE TABLE "idempotency_keys" (
