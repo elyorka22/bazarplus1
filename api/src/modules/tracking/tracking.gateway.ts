@@ -1,0 +1,170 @@
+import { Inject, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import {
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayInit,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
+} from '@nestjs/websockets';
+import { OrderStatus, Role } from '@prisma/client';
+import { CourierService } from '../courier/courier.service';
+
+const ADMIN_ROOM = 'admin';
+import { createAdapter } from '@socket.io/redis-adapter';
+import type { Server, Socket } from 'socket.io';
+import Redis from 'ioredis';
+import type { AdminBroadcastOrderListItem } from '../../infrastructure/events/order-events.publisher';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { buildSocketIoCors } from '../../config/socket-io-cors';
+import { REDIS_CLIENT } from '../../infrastructure/redis/redis.tokens';
+import { PrismaService } from '../../prisma/prisma.service';
+
+@WebSocketGateway({
+  namespace: '/tracking',
+  cors: buildSocketIoCors(),
+})
+export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
+  private readonly logger = new Logger(TrackingGateway.name);
+
+  @WebSocketServer()
+  server!: Server;
+
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly courierService: CourierService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
+
+  afterInit(server: Server): void {
+    const pubClient = this.redis.duplicate();
+    const subClient = this.redis.duplicate();
+    server.adapter(createAdapter(pubClient, subClient));
+    this.logger.log('Socket.IO Redis adapter enabled for horizontal scaling');
+  }
+
+  async handleConnection(client: Socket) {
+    const raw = client.handshake.auth?.token as string | undefined;
+    if (!raw) {
+      client.disconnect(true);
+      return;
+    }
+    try {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(raw, {
+        secret: this.config.getOrThrow<string>('jwtAccessSecret'),
+      });
+      (client.data as { user?: JwtPayload }).user = payload;
+      if (payload.role === Role.ADMIN) {
+        await client.join(ADMIN_ROOM);
+      }
+      const courier = await this.prisma.courier.findUnique({
+        where: { userId: payload.sub },
+      });
+      if (courier) {
+        await client.join(`courier:${courier.id}`);
+      }
+    } catch {
+      this.logger.warn('WS auth failed');
+      client.disconnect(true);
+    }
+  }
+
+  @SubscribeMessage('join')
+  async joinRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { orderId: string },
+  ) {
+    const user = (client.data as { user?: JwtPayload }).user;
+    if (!user || !body?.orderId) {
+      client.emit('error', { message: 'Invalid join payload' });
+      return;
+    }
+    const order = await this.prisma.order.findUnique({
+      where: { id: body.orderId },
+      select: { userId: true },
+    });
+    if (!order || (order.userId !== user.sub && user.role !== Role.ADMIN)) {
+      client.emit('error', { message: 'Forbidden' });
+      return;
+    }
+    await client.join(this.roomFor(body.orderId));
+    client.emit('joined', { orderId: body.orderId });
+  }
+
+  async emitOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+    const body = { orderId, status };
+    this.server.to(this.roomFor(orderId)).emit('order:status', body);
+    this.server.to(ADMIN_ROOM).emit('order:status.updated', body);
+    const row = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { courierId: true },
+    });
+    if (row?.courierId) {
+      this.server
+        .to(`courier:${row.courierId}`)
+        .emit('order:status.updated', body);
+    }
+  }
+
+  emitCourierLocation(
+    orderId: string,
+    payload: {
+      orderId: string;
+      courierId: string;
+      lat: number;
+      lng: number;
+    },
+  ): void {
+    this.server.to(this.roomFor(orderId)).emit('courier:location', payload);
+    this.server.to(ADMIN_ROOM).emit('courier:location.updated', payload);
+  }
+
+  emitOrderCreated(order: AdminBroadcastOrderListItem): void {
+    this.server.to(ADMIN_ROOM).emit('order:created', order);
+  }
+
+  emitCourierAssigned(
+    orderId: string,
+    courier: { id: string; name: string },
+  ): void {
+    this.server.to(ADMIN_ROOM).emit('courier:assigned', { orderId, courier });
+    this.server.to(`courier:${courier.id}`).emit('order:assigned', {
+      orderId,
+      courierId: courier.id,
+    });
+  }
+
+  @SubscribeMessage('courier:location.update')
+  async courierLocationUpdate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { lat?: number; lng?: number },
+  ): Promise<void> {
+    const user = (client.data as { user?: JwtPayload }).user;
+    if (
+      !user ||
+      typeof body?.lat !== 'number' ||
+      typeof body?.lng !== 'number'
+    ) {
+      return;
+    }
+    const courier = await this.prisma.courier.findUnique({
+      where: { userId: user.sub },
+    });
+    if (!courier) {
+      return;
+    }
+    await this.courierService.updateLocation(courier.id, {
+      lat: body.lat,
+      lng: body.lng,
+    });
+  }
+
+  private roomFor(orderId: string): string {
+    return `order:${orderId}`;
+  }
+}

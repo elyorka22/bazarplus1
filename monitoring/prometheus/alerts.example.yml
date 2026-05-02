@@ -1,0 +1,61 @@
+groups:
+  - name: bazarplus-api
+    rules:
+      - alert: HighHttpLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: API p95 latency above 1s
+          description: >
+            95th percentile HTTP latency exceeds 1 second over 5 minutes.
+
+      - alert: HighHttpErrorRate
+        expr: |
+          (
+            sum(rate(http_responses_server_errors_total[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: HTTP 5xx rate above 5%
+          description: >
+            More than 5% of requests return 5xx in the last 5 minutes.
+
+      - alert: RedisDown
+        expr: dependency_redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis dependency unhealthy (API scrape)
+          description: dependency_redis_up gauge is 0 — Redis ping failed.
+
+      - alert: OrderQueueBacklog
+        expr: bullmq_queue_jobs_waiting{queue="order"} > 50
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Order queue backlog high
+          description: >
+            More than 50 jobs waiting in the order queue for 15 minutes (courier assignment / fulfillment bottleneck).
+
+      - alert: ElevatedRateLimit429
+        expr: |
+          sum(rate(http_rate_limited_total[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High volume of HTTP 429 (rate limit) responses
+          description: >
+            Throttler is rejecting >5 req/s (sustained). Check abusive clients (see logs / Loki by IP) or tune limits.

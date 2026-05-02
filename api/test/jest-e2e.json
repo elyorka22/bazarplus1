@@ -1,0 +1,15 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testMatch": ["<rootDir>/test/**/*.e2e-spec.ts", "<rootDir>/test/**/*.integration-spec.ts"],
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "setupFiles": ["<rootDir>/test/setup/load-env.ts"],
+  "setupFilesAfterEnv": ["<rootDir>/test/setup/jest-e2e-setup.ts"],
+  "globalSetup": "<rootDir>/test/setup/global-setup.ts",
+  "modulePathIgnorePatterns": ["<rootDir>/dist/"],
+  "testTimeout": 120000,
+  "maxWorkers": 1
+}

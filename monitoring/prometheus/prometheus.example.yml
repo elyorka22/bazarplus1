@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: bazarplus-api
+    metrics_path: /metrics
+    scheme: https
+    static_configs:
+      # Replace with your Droplet / LB hostname (or use http + scheme http for local docker api)
+      - targets: ['api.domain.com:443']
+    tls_config:
+      insecure_skip_verify: false
+
+  - job_name: bazarplus-worker
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      # Private IP or Docker service name if Prometheus runs on same host network as worker
+      - targets: ['worker:9101']
+
+  # Optional: uncomment for local docker-compose stack (HTTP API on host :3000)
+  # - job_name: bazarplus-api-local
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ['host.docker.internal:3000']

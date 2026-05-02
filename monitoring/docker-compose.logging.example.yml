@@ -1,0 +1,32 @@
+# Optional: Grafana Loki + Promtail for JSON container logs (requestId / userId correlation).
+# Run alongside app stack on a trusted network; expose only Grafana/Loki internally or behind SSO.
+#
+#   docker compose -f docker-compose.logging.example.yml up -d
+#
+# Point Promtail at Docker socket or static files; label `job=bazarplus-api`.
+
+services:
+  loki:
+    image: grafana/loki:3.1.0
+    ports:
+      - '3100:3100'
+    # Image ships `/etc/loki/local-config.yaml`; persist chunks if you keep this long-term.
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./loki/promtail.docker.example.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+volumes:
+  loki_data: {}
