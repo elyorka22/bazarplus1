@@ -122,7 +122,11 @@ export default function CheckoutPage() {
         </p>
       </Card>
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+      <form
+        noValidate
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-5"
+      >
         <div>
           <label className="text-sm font-medium text-ink">
             {uz.checkout.deliveryAddress}

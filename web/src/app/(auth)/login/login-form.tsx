@@ -57,7 +57,11 @@ export function LoginForm() {
         <h1 className="text-2xl font-bold text-ink">{uz.auth.loginTitle}</h1>
         <p className="mt-1 text-sm text-neutral-600">{uz.auth.loginSubtitle}</p>
       </div>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        noValidate
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4"
+      >
         <div>
           <label htmlFor="login-email" className="text-sm font-medium text-ink">
             {uz.auth.email}

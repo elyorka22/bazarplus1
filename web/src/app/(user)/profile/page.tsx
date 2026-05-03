@@ -123,6 +123,7 @@ export default function ProfilePage() {
         <h2 className="font-semibold text-ink">{uz.profile.account}</h2>
         <p className="mt-1 text-sm text-neutral-500">{userQuery.data?.email}</p>
         <form
+          noValidate
           className="mt-4 space-y-3"
           onSubmit={profileForm.handleSubmit((v) => saveProfile.mutate(v))}
         >
@@ -158,6 +159,7 @@ export default function ProfilePage() {
           {uz.profile.addAddressTitle}
         </h3>
         <form
+          noValidate
           className="mt-3 space-y-3"
           onSubmit={addressForm.handleSubmit((v) => addAddress.mutate(v))}
         >

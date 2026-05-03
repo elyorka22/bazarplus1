@@ -64,7 +64,11 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-bold text-ink">{uz.auth.createTitle}</h1>
         <p className="mt-1 text-sm text-neutral-600">{uz.auth.createSubtitle}</p>
       </div>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        noValidate
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-4"
+      >
         <div>
           <label className="text-sm font-medium text-ink">{uz.auth.nameOptional}</label>
           <Input className="mt-1" {...form.register("name")} />
