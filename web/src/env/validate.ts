@@ -32,9 +32,26 @@ export function getPublicApiUrlValidated(): string {
 }
 
 /**
- * Server Route Handlers: fail fast on misconfiguration (except explicit fallback in dev).
+ * Server Route Handlers: prefer SERVER_API_URL (e.g. http://api:3000 in Docker) so
+ * fetches do not hit localhost inside the web container. Browser still uses NEXT_PUBLIC_API_URL.
  */
 export function getServerApiUrlValidated(): string {
+  const internalRaw = process.env.SERVER_API_URL?.trim();
+  if (internalRaw) {
+    const internal = urlSchema.safeParse(internalRaw);
+    if (internal.success) {
+      return internal.data;
+    }
+    const detail = internal.error.issues.map((i) => i.message).join("; ");
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[env] SERVER_API_URL invalid (${detail}), falling back to NEXT_PUBLIC_API_URL`,
+      );
+    } else {
+      throw new Error(`SERVER_API_URL: ${detail}`);
+    }
+  }
+
   const raw =
     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
   const parsed = urlSchema.safeParse(raw);

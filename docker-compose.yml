@@ -69,6 +69,27 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # Baked into client bundle at build — set to URL browsers use to reach Nest (e.g. http://YOUR_IP:3000 or https://api.example.com).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+        NEXT_PUBLIC_DEMO_DATA: ${NEXT_PUBLIC_DEMO_DATA:-false}
+        NEXT_PUBLIC_DISABLE_SOCKET: ${NEXT_PUBLIC_DISABLE_SOCKET:-false}
+        NEXT_PUBLIC_DISABLE_GEOLOCATION: ${NEXT_PUBLIC_DISABLE_GEOLOCATION:-false}
+    restart: unless-stopped
+    env_file:
+      - ./web/.env.production
+    environment:
+      NODE_ENV: production
+      SERVER_API_URL: http://api:3000
+    expose:
+      - '3000'
+    depends_on:
+      - api
+
   nginx:
     image: nginx:1.26-alpine
     restart: unless-stopped
@@ -78,6 +99,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api
+      - web
 
 volumes:
   postgres_data:
