@@ -1,4 +1,4 @@
-import { Inject, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -11,23 +11,30 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { OrderStatus, Role } from '@prisma/client';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient, type RedisClientType } from 'redis';
+import { Namespace, type Server, type Socket } from 'socket.io';
+import { buildSocketIoCors } from '../../config/socket-io-cors';
+import type { AdminBroadcastOrderListItem } from '../../infrastructure/events/order-events.publisher';
+import { PrismaService } from '../../prisma/prisma.service';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CourierService } from '../courier/courier.service';
 
 const ADMIN_ROOM = 'admin';
-import { createAdapter } from '@socket.io/redis-adapter';
-import type { Server, Socket } from 'socket.io';
-import Redis from 'ioredis';
-import type { AdminBroadcastOrderListItem } from '../../infrastructure/events/order-events.publisher';
-import type { JwtPayload } from '../auth/types/jwt-payload.type';
-import { buildSocketIoCors } from '../../config/socket-io-cors';
-import { REDIS_CLIENT } from '../../infrastructure/redis/redis.tokens';
-import { PrismaService } from '../../prisma/prisma.service';
+
+function resolveMainServer(serverOrNamespace: Server | Namespace): Server {
+  return serverOrNamespace instanceof Namespace
+    ? serverOrNamespace.server
+    : serverOrNamespace;
+}
 
 @WebSocketGateway({
   namespace: '/tracking',
   cors: buildSocketIoCors(),
 })
 export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
+  private static readonly ioWithRedisAdapter = new WeakSet<Server>();
+
   private readonly logger = new Logger(TrackingGateway.name);
 
   @WebSocketServer()
@@ -38,14 +45,64 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayInit {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly courierService: CourierService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
-  afterInit(server: Server): void {
-    const pubClient = this.redis.duplicate();
-    const subClient = this.redis.duplicate();
-    server.adapter(createAdapter(pubClient, subClient));
-    this.logger.log('Socket.IO Redis adapter enabled for horizontal scaling');
+  afterInit(serverOrNamespace: Server | Namespace): void {
+    const io = resolveMainServer(serverOrNamespace);
+    void this.attachRedisAdapter(io).catch((err: unknown) => {
+      this.logger.error(
+        'Unexpected error while attaching Redis adapter',
+        err instanceof Error ? err.stack : String(err),
+      );
+    });
+  }
+
+  private async attachRedisAdapter(io: Server): Promise<void> {
+    if (TrackingGateway.ioWithRedisAdapter.has(io)) {
+      return;
+    }
+
+    let pubClient: RedisClientType | undefined;
+    let subClient: RedisClientType | undefined;
+
+    try {
+      const url = this.config.getOrThrow<string>('redisUrl');
+      pubClient = createClient({ url });
+      subClient = pubClient.duplicate();
+
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+
+      io.adapter(createAdapter(pubClient, subClient));
+      TrackingGateway.ioWithRedisAdapter.add(io);
+
+      this.logger.log(
+        'Socket.IO Redis adapter enabled (main server; all namespaces)',
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Socket.IO Redis adapter skipped — using default in-memory adapter (${err instanceof Error ? err.message : String(err)})`,
+      );
+
+      const safeClose = async (client: RedisClientType | undefined) => {
+        if (!client) return;
+        try {
+          if (client.isOpen) {
+            await client.quit();
+          } else {
+            await client.disconnect();
+          }
+        } catch {
+          try {
+            await client.disconnect();
+          } catch {
+            /* ignore */
+          }
+        }
+      };
+
+      await safeClose(pubClient);
+      await safeClose(subClient);
+    }
   }
 
   async handleConnection(client: Socket) {
