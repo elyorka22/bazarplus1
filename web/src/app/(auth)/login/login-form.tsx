@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -14,15 +14,14 @@ import { parseApiError } from "@/lib/api";
 import { uz } from "@/lib/i18n/uz";
 
 const schema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(1, uz.validation.required).email(),
   password: z.string().min(1, uz.validation.required),
 });
 
 type Form = z.infer<typeof schema>;
 
-export function LoginForm() {
+export function LoginForm({ defaultNext }: { defaultNext: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +33,7 @@ export function LoginForm() {
           email: demoAuthCredentials.email,
           password: demoAuthCredentials.password,
         }
-      : undefined,
+      : { email: "", password: "" },
   });
 
   async function onSubmit(values: Form) {
@@ -42,8 +41,7 @@ export function LoginForm() {
     setBusy(true);
     try {
       await login(values.email, values.password);
-      const next = searchParams.get("next") ?? "/";
-      router.replace(next);
+      router.replace(defaultNext);
     } catch (e) {
       setErr(e instanceof Error ? e.message : parseApiError(e));
     } finally {
@@ -59,7 +57,11 @@ export function LoginForm() {
       </div>
       <form
         noValidate
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(onSubmit, (errors) => {
+          const msg =
+            errors.email?.message ?? errors.password?.message ?? null;
+          if (msg) setErr(String(msg));
+        })}
         className="space-y-4"
       >
         <div>

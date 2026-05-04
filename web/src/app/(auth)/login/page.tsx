@@ -1,15 +1,17 @@
-import { Suspense } from "react";
-import { uz } from "@/lib/i18n/uz";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <p className="mt-8 text-sm text-neutral-500">{uz.auth.loading}</p>
-      }
-    >
-      <LoginForm />
-    </Suspense>
-  );
+function safeNextPath(raw: string | string[] | undefined): string {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v || !v.startsWith("/") || v.startsWith("//")) {
+    return "/";
+  }
+  return v;
+}
+
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: { next?: string | string[] };
+}) {
+  return <LoginForm defaultNext={safeNextPath(searchParams.next)} />;
 }
