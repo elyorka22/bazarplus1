@@ -17,9 +17,12 @@ import { parseApiError } from "@/lib/api";
 import { uz } from "@/lib/i18n/uz";
 
 const schema = z.object({
-  name: z.string().max(120).optional(),
-  email: z.string().email(),
-  password: z.string().min(8, uz.validation.passwordMin8),
+  name: z.string().trim().max(120).optional(),
+  email: z.string().trim().min(1, uz.validation.required).email(),
+  password: z
+    .string()
+    .min(1, uz.validation.required)
+    .min(8, uz.validation.passwordMin8),
 });
 
 type Form = z.infer<typeof schema>;
@@ -38,10 +41,11 @@ export default function RegisterPage() {
           email: demoRegisterDefaults.email,
           password: demoRegisterDefaults.password,
         }
-      : undefined,
+      : { name: "", email: "", password: "" },
   });
 
   async function onSubmit(values: Form) {
+    console.log("SUBMIT WORKED", values);
     setErr(null);
     setBusy(true);
     try {

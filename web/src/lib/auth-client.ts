@@ -26,6 +26,7 @@ export async function registerAccount(input: {
   password: string;
   name?: string;
 }) {
+  console.log("REGISTER ACCOUNT CALLED", input);
   const res = await fetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,6 +34,7 @@ export async function registerAccount(input: {
     body: JSON.stringify(input),
   });
   const data = await res.json().catch(() => ({}));
+  console.log("REGISTER ACCOUNT RESPONSE", { status: res.status, data });
   if (!res.ok) {
     const msg =
       (data as { error?: { message?: string } }).error?.message ??
